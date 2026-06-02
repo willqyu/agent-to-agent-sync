@@ -12,7 +12,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { PeerdClient } from "./peerd_client.js";
 
+// Socket path precedence: CLI arg (shell-agnostic) > env var > default.
+// See check_inbox.ts for why the CLI arg exists (Windows hook commands).
 const SOCKET_PATH =
+  process.argv[2] ??
   process.env.PEERD_CONTROL_SOCK ??
   path.join(os.homedir(), ".claude", "peerd", "control.sock");
 
@@ -36,7 +39,9 @@ function appendLog(msg: string): void {
 async function main() {
   await readStdin();
   appendLog(`fired; socket=${SOCKET_PATH}`);
-  if (!fs.existsSync(SOCKET_PATH)) {
+  // Windows: named-pipe control socket has no filesystem entry; skip the stat
+  // fast-path and rely on the connect try/catch below. (See check_inbox.ts.)
+  if (process.platform !== "win32" && !fs.existsSync(SOCKET_PATH)) {
     appendLog("socket missing, exiting 0");
     process.exit(0);
   }

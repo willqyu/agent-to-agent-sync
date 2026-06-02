@@ -14,6 +14,16 @@ export function controlSocketPath(): string {
   return path.join(stateDir(), "control.sock");
 }
 
+// On Windows the control socket is a named pipe, not an AF_UNIX file path.
+// Derive the pipe name deterministically from the configured file path so the
+// CLI and the peerd daemon agree. Mirror of peerd/src/socket_path.ts.
+function controlEndpoint(socketPath: string): string {
+  if (process.platform === "win32") {
+    return "\\\\.\\pipe\\" + socketPath.replace(/[\\/:]/g, "-");
+  }
+  return socketPath;
+}
+
 export function peersTomlPath(): string {
   return path.join(stateDir(), "peers.toml");
 }
@@ -57,7 +67,7 @@ export class ControlClient {
 
   static connect(socketPath: string = controlSocketPath()): Promise<ControlClient> {
     return new Promise((resolve, reject) => {
-      const sock = net.createConnection({ path: socketPath }, () => resolve(new ControlClient(sock)));
+      const sock = net.createConnection({ path: controlEndpoint(socketPath) }, () => resolve(new ControlClient(sock)));
       sock.once("error", reject);
     });
   }

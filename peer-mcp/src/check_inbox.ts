@@ -10,7 +10,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { PeerdClient } from "./peerd_client.js";
 
+// Socket path precedence: CLI arg (shell-agnostic, used by configs that can't
+// rely on bash-style `VAR=val cmd` env prefixes — e.g. Windows) > env var >
+// default. argv[2] is the first positional arg under `node script.js <sock>`.
 const SOCKET_PATH =
+  process.argv[2] ??
   process.env.PEERD_CONTROL_SOCK ??
   path.join(os.homedir(), ".claude", "peerd", "control.sock");
 
@@ -39,7 +43,11 @@ async function main() {
   // need any of its fields, but consuming it cleanly avoids EPIPE on the parent).
   await readStdin();
 
-  if (!fs.existsSync(SOCKET_PATH)) {
+  // On POSIX the control socket is a file we can stat as a fast "is peerd up?"
+  // check. On Windows it's a named pipe with no filesystem entry, so existsSync
+  // is always false — skip the fast-path there and let the connect attempt below
+  // (with its try/catch) be the liveness test.
+  if (process.platform !== "win32" && !fs.existsSync(SOCKET_PATH)) {
     // peerd isn't running; silently do nothing — we never want to break a turn.
     process.exit(0);
   }

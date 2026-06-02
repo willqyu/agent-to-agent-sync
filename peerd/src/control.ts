@@ -8,6 +8,7 @@ import * as readline from "node:readline";
 import { CallManager, InviteEvent } from "./call_manager.js";
 import { CallInbox } from "./call_inbox.js";
 import { notify } from "./notify.js";
+import { controlEndpoint } from "./socket_path.js";
 import type { Config } from "./config.js";
 import type { Connection } from "./connection.js";
 import type { EndPayload } from "./types.js";
@@ -181,13 +182,18 @@ export class ControlServer {
   }
 
   async start(): Promise<void> {
-    try { await fs.promises.unlink(this.socketPath); } catch { /* not present */ }
+    const endpoint = controlEndpoint(this.socketPath);
+    const isWin = process.platform === "win32";
+    // On POSIX a stale socket file blocks bind; on Windows the named pipe has no
+    // filesystem entry to clean up (and unlink/chmod don't apply to pipes).
+    if (!isWin) { try { await fs.promises.unlink(this.socketPath); } catch { /* not present */ } }
 
     this.server = net.createServer((sock) => this.handleClient(sock));
     await new Promise<void>((resolve, reject) => {
       this.server!.once("error", reject);
-      this.server!.listen(this.socketPath, () => {
+      this.server!.listen(endpoint, () => {
         this.server!.off("error", reject);
+        if (isWin) { resolve(); return; }
         fs.chmod(this.socketPath, 0o600, () => resolve());
       });
     });
@@ -195,7 +201,9 @@ export class ControlServer {
 
   async stop(): Promise<void> {
     await new Promise<void>((resolve) => this.server?.close(() => resolve()));
-    try { await fs.promises.unlink(this.socketPath); } catch { /* ignore */ }
+    if (process.platform !== "win32") {
+      try { await fs.promises.unlink(this.socketPath); } catch { /* ignore */ }
+    }
   }
 
   private handleClient(sock: net.Socket): void {

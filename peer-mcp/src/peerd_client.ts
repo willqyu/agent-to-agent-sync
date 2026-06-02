@@ -4,6 +4,16 @@
 import * as net from "node:net";
 import * as readline from "node:readline";
 
+// On Windows the control socket is a named pipe, not an AF_UNIX file path.
+// Derive the pipe name deterministically from the configured file path so this
+// client and the peerd daemon agree. Mirror of peerd/src/socket_path.ts.
+function controlEndpoint(socketPath: string): string {
+  if (process.platform === "win32") {
+    return "\\\\.\\pipe\\" + socketPath.replace(/[\\/:]/g, "-");
+  }
+  return socketPath;
+}
+
 interface PendingCall {
   resolve: (result: unknown) => void;
   reject: (err: Error) => void;
@@ -38,7 +48,7 @@ export class PeerdClient {
 
   static connect(socketPath: string): Promise<PeerdClient> {
     return new Promise((resolve, reject) => {
-      const sock = net.createConnection({ path: socketPath }, () => resolve(new PeerdClient(sock)));
+      const sock = net.createConnection({ path: controlEndpoint(socketPath) }, () => resolve(new PeerdClient(sock)));
       sock.once("error", reject);
     });
   }

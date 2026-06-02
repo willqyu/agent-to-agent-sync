@@ -3,6 +3,7 @@
 
 import * as net from "node:net";
 import * as readline from "node:readline";
+import { controlEndpoint } from "./socket_path.js";
 
 interface PendingCall {
   resolve: (result: unknown) => void;
@@ -40,7 +41,7 @@ export class ControlClient {
 
   static connect(socketPath: string): Promise<ControlClient> {
     return new Promise((resolve, reject) => {
-      const sock = net.createConnection({ path: socketPath }, () => {
+      const sock = net.createConnection({ path: controlEndpoint(socketPath) }, () => {
         resolve(new ControlClient(sock));
       });
       sock.once("error", reject);

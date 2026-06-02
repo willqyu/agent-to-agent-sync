@@ -35,7 +35,6 @@ const TOKEN_BA = "tok_bob_to_alex";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const PEER_MCP_ENTRY = path.join(REPO_ROOT, "peer-mcp", "src", "index.ts");
-const TSX_BIN = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
 
 async function writePeerToml(stateDir: string, self: string, port: number, peerName: string, peerPort: number, ourOut: string, ourIn: string, peerFingerprint?: string) {
   const lines = [
@@ -125,9 +124,14 @@ async function dialAndRegister(node: PeerdNode, targetName: string): Promise<Con
 }
 
 async function makeMcpClient(label: string, controlSocketPath: string): Promise<Client> {
+  // Spawn node directly with the tsx loader rather than the node_modules/.bin/tsx
+  // shim. On Windows that shim is tsx.cmd, and killing the cmd.exe wrapper at
+  // teardown orphans the node grandchild — which keeps its control-socket
+  // connection open, so the server's close() never drains. Spawning node itself
+  // means transport.close()'s kill() reaps the real process on every platform.
   const transport = new StdioClientTransport({
-    command: TSX_BIN,
-    args: [PEER_MCP_ENTRY],
+    command: process.execPath,
+    args: ["--import", "tsx", PEER_MCP_ENTRY],
     env: { ...process.env, PEERD_CONTROL_SOCK: controlSocketPath } as Record<string, string>,
     stderr: "inherit",
   });

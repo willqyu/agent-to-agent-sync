@@ -14,7 +14,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { detectMyHostname } from "../lib/hostname.js";
 import { IS_LINUX, IS_MAC, IS_WIN, symlinkOrCopyDir, whichSync } from "../lib/platform.js";
 
@@ -44,7 +44,18 @@ function parseOpts(args: string[]): Opts {
 
 // `which`/`where` proxy that works cross-platform. Returns absolute path or null.
 function which(cmd: string): string | null {
+<<<<<<< Updated upstream
   return whichSync(cmd);
+=======
+  // Windows has no `which`; `where` is the equivalent and prints one match per
+  // line (we take the first). `where` needs shell:true to resolve as a builtin.
+  const isWin = process.platform === "win32";
+  const r = isWin
+    ? spawnSync("where", [cmd], { encoding: "utf8", shell: true })
+    : spawnSync("which", [cmd], { encoding: "utf8" });
+  if (r.status === 0 && r.stdout.trim()) return r.stdout.trim().split(/\r?\n/)[0].trim();
+  return null;
+>>>>>>> Stashed changes
 }
 
 export async function cmdInit(args: string[]): Promise<number> {
@@ -92,7 +103,9 @@ export async function cmdInit(args: string[]): Promise<number> {
   }
 
   // Generate cert by importing the peerd ensureTls helper from dist.
-  const tlsMod = await import(path.join(REPO_ROOT, "peerd", "dist", "tls.js"));
+  // Dynamic import needs a file:// URL on Windows — a bare C:\… path is rejected
+  // by the ESM loader as an unsupported URL scheme.
+  const tlsMod = await import(pathToFileURL(path.join(REPO_ROOT, "peerd", "dist", "tls.js")).href);
   const selfName = opts.name ?? readSelfFromPeersToml(STATE_DIR) ?? os.userInfo().username;
   const tls = await tlsMod.ensureTls(STATE_DIR, selfName);
   log(`  ✓ cert at ${path.join(TLS_DIR, "cert.pem")}`);
@@ -205,10 +218,13 @@ export async function cmdInit(args: string[]): Promise<number> {
     if (!fs.statSync(src).isDirectory()) continue;
     if (fs.existsSync(dst)) {
       const stat = fs.lstatSync(dst);
-      if (stat.isSymbolicLink() && fs.readlinkSync(dst) === src) continue;
+      // Junctions report as symlinks; compare resolved targets so Windows's
+      // trailing-separator / absolute form still counts as an existing link.
+      if (stat.isSymbolicLink() && path.resolve(fs.readlinkSync(dst)) === path.resolve(src)) continue;
       log(`  ! ${name} already exists at ${dst}; leaving alone`);
       continue;
     }
+<<<<<<< Updated upstream
     const mode = symlinkOrCopyDir(src, dst);
     if (mode === "copy") anyCopied = true;
     log(`  ✓ ${mode === "symlink" ? "symlinked" : "copied"} ${name}`);
@@ -217,6 +233,11 @@ export async function cmdInit(args: string[]): Promise<number> {
     log(`  ! some skills were copied instead of symlinked (no symlink permission).`);
     log(`     Re-run 'peerd init' after editing skills/ to refresh the copies,`);
     log(`     or enable Windows Developer Mode (Settings → For Developers) to get symlinks.`);
+=======
+    // "dir" symlinks need admin/developer-mode on Windows; "junction" doesn't.
+    fs.symlinkSync(src, dst, process.platform === "win32" ? "junction" : "dir");
+    log(`  ✓ symlinked ${name}`);
+>>>>>>> Stashed changes
   }
 
   // ── 7. Shell aliases ───────────────────────────────────────────
@@ -224,8 +245,21 @@ export async function cmdInit(args: string[]): Promise<number> {
   log("step 6/7: shell aliases (claude + peerd)…");
   if (opts.noAlias) {
     log(`  - skipped (--no-alias)`);
+<<<<<<< Updated upstream
   } else if (IS_WIN) {
     installPowerShellAliases(REPO_ROOT, log);
+=======
+  } else if (process.platform === "win32") {
+    // Windows shells don't source .zshrc/.bashrc. Rather than edit the user's
+    // PowerShell $PROFILE automatically (intrusive + path varies by host), print
+    // a ready-to-paste function plus the one-off override.
+    const peerdCliEntry = path.join(REPO_ROOT, "peerd-cli", "dist", "index.js");
+    log(`  ! Windows: add these to your PowerShell profile (run \`notepad $PROFILE\`):`);
+    log(`      function claude { claude.cmd --dangerously-load-development-channels server:peerd @args }`);
+    log(`      function peerd  { node ${JSON.stringify(peerdCliEntry)} @args }`);
+    log(`    Or skip the function and launch directly each time:`);
+    log(`      claude --dangerously-load-development-channels server:peerd`);
+>>>>>>> Stashed changes
   } else {
     installPosixAliases(REPO_ROOT, log);
   }

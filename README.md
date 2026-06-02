@@ -2,7 +2,7 @@
 
 **Two Claude Code agents on different machines hold a direct conversation** to align on interface contracts, schema changes, design decisions — with the humans watching and able to intervene. The conversation flows into each agent's normal session via MCP Channels, so after the call both sides retain full context with zero copy-paste.
 
-> ⚠️ **Research-preview**: relies on Claude Code's experimental Channels feature (v2.1.80+) for ambient call delivery. Works on **macOS** and **Ubuntu/Linux**. The daemon, MCP server, channel delivery, and `AskUserQuestion` popup work cross-platform; only macOS notification ringing and LaunchAgent auto-start are mac-only.
+> ⚠️ **Research-preview**: relies on Claude Code's experimental Channels feature (v2.1.80+) for ambient call delivery. Works on **macOS**, **Ubuntu/Linux**, and **Windows**. The daemon, MCP server, channel delivery, control socket, and `AskUserQuestion` popup work cross-platform. Platform-specific bits: macOS notification ringing is mac-only; auto-start at login is macOS (LaunchAgent) + Linux (systemd) only — on Windows you start peerd manually. On Windows the control socket is a named pipe (rather than a Unix-domain socket), wired automatically.
 
 For the design rationale see [`ARCHITECTURE.md`](./ARCHITECTURE.md). For the wire protocol see [`PROTOCOL.md`](./PROTOCOL.md).
 
@@ -12,7 +12,7 @@ For the design rationale see [`ARCHITECTURE.md`](./ARCHITECTURE.md). For the wir
 
 - **Claude Code** v2.1.80+ — confirmed working on v2.1.150
 - **Node.js** 18+
-- **macOS** (full UX, with macOS notification ringing + LaunchAgent) **or Ubuntu/Linux** (everything works except the macOS notification + LaunchAgent).
+- **macOS** (full UX, with macOS notification ringing + LaunchAgent), **Ubuntu/Linux** (everything except the macOS notification; systemd auto-start), or **Windows** (everything except macOS notification ringing + login auto-start; start peerd manually).
 - **Tailscale** (recommended for cross-network calls). LAN + mDNS also works.
 
 ---
@@ -28,16 +28,25 @@ npm install && npm run build
 npm run local-test
 ```
 
-That writes a test environment at `~/peerd-local-test/{alice,bob}/` with paired TLS certs, tokens, project-scoped Claude Code settings, and helper scripts.
+On **Windows** (PowerShell), the same steps:
+
+```powershell
+git clone https://github.com/alex-crlhmmr/agent-to-agent-sync.git
+cd agent-to-agent-sync
+npm install ; npm run build
+npm run local-test
+```
+
+That writes a test environment at `~/peerd-local-test/{alice,bob}/` (`$env:USERPROFILE\peerd-local-test\…` on Windows) with paired TLS certs, tokens, project-scoped Claude Code settings, and helper scripts. `npm run local-test` prints the exact four commands for your platform — copy them from its output.
 
 Open **four terminals** and run, in order:
 
-| | Terminal | Command |
-|---|---|---|
-| ① | alice's peerd  | `~/peerd-local-test/alice/start-peerd.sh` |
-| ② | bob's peerd    | `~/peerd-local-test/bob/start-peerd.sh` |
-| ③ | alice's Claude Code | `~/peerd-local-test/alice/start-claude.sh` |
-| ④ | bob's Claude Code   | `~/peerd-local-test/bob/start-claude.sh` |
+| | Terminal | macOS/Linux | Windows (PowerShell) |
+|---|---|---|---|
+| ① | alice's peerd  | `~/peerd-local-test/alice/start-peerd.sh` | `& "$env:USERPROFILE\peerd-local-test\alice\start-peerd.ps1"` |
+| ② | bob's peerd    | `~/peerd-local-test/bob/start-peerd.sh` | `& "$env:USERPROFILE\peerd-local-test\bob\start-peerd.ps1"` |
+| ③ | alice's Claude Code | `~/peerd-local-test/alice/start-claude.sh` | `& "$env:USERPROFILE\peerd-local-test\alice\start-claude.ps1"` |
+| ④ | bob's Claude Code   | `~/peerd-local-test/bob/start-claude.sh` | `& "$env:USERPROFILE\peerd-local-test\bob\start-claude.ps1"` |
 
 Wait for `handshake done with <peer>` in both peerd terminals before opening Claude Code.
 
@@ -61,13 +70,24 @@ rm -rf ~/peerd-local-test
 npm run local-test
 ```
 
+On **Windows** (PowerShell):
+```powershell
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'peerd[\\/]src[\\/]index' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Remove-Item -Recurse -Force "$env:USERPROFILE\peerd-local-test"
+npm run local-test
+```
+
 ---
 
 ## Use it with a real teammate
 
 Three commands per machine + one pairing exchange. The `peerd` CLI handles all the credential exchange + config wiring; no hand-editing.
 
+<<<<<<< Updated upstream
 ### Step 1 — install on each machine (macOS / Linux / Windows)
+=======
+### Step 1 — install on each machine (mac, linux, AND/OR windows)
+>>>>>>> Stashed changes
 
 ```bash
 git clone https://github.com/alex-crlhmmr/agent-to-agent-sync.git
@@ -75,7 +95,11 @@ cd agent-to-agent-sync
 npm install && npm run build
 ```
 
+<<<<<<< Updated upstream
 Windows is supported alongside macOS and Linux. See [Windows notes](#windows-notes) below for the differences (PowerShell `$PROFILE` aliases instead of `.zshrc`, Startup-folder shortcut instead of systemd, copy-mode for skills unless Developer Mode is on).
+=======
+> **On Windows**, the same `peerd init` works (it uses `where`/junctions instead of `which`/symlinks), with two differences: (1) there's no login auto-start, so `--autostart` is a no-op — start peerd manually with `npm run peerd` in a terminal you keep open; (2) instead of a shell alias, `peerd init` prints a PowerShell function to paste into your `$PROFILE` (or just launch with `claude --dangerously-load-development-channels server:peerd` each time).
+>>>>>>> Stashed changes
 
 ### Step 2 — configure peerd on each machine
 
